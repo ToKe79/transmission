@@ -22,6 +22,7 @@
 #include "bandwidth.h" /* tr_bandwidth */
 #include "bitfield.h"
 #include "completion.h" /* tr_completion */
+#include "file.h"
 #include "session.h" /* tr_sessionLock(), tr_sessionUnlock() */
 #include "tr-assert.h"
 #include "tr-macros.h"
@@ -209,10 +210,27 @@ struct tr_torrent
         return checked;
     }
 
+    void initMTimes()
+    {
+        if (info.files[0].mtime != 0)
+        {
+            return; // already initialized
+        }
+
+        auto tmpstr = std::string{};
+        for (tr_file_index_t i = 0; i < info.fileCount; ++i)
+        {
+            auto const found = findFile(i, tmpstr);
+            info.files[i].mtime = found ? found->last_modified_at : 0;
+        }
+    }
+
     void initCheckedPieces(tr_bitfield const& checked, time_t const* mtimes /*fileCount*/)
     {
         TR_ASSERT(std::size(checked) == info.pieceCount);
         checked_pieces_ = checked;
+
+        initMTimes();
 
         for (size_t i = 0; i < info.fileCount; ++i)
         {
@@ -370,6 +388,22 @@ struct tr_torrent
     bool finishedSeedingByIdle;
 
     tr_labels_t labels;
+
+    struct tr_found_file : public tr_sys_path_info
+    {
+        std::string_view path;
+        std::string subpath;
+    };
+
+    std::optional<tr_found_file> findFile(tr_file_index_t fileNum, std::string& tmpstr) const;
+
+    std::optional<tr_found_file> findFile(tr_file_index_t fileNum) const
+    {
+        std::string tmpstr;
+        return findFile(fileNum, tmpstr);
+    }
+
+private:
 };
 
 /* what piece index is this block in? */

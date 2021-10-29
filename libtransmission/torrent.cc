@@ -17,6 +17,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -808,9 +809,11 @@ void tr_torrentGotNewInfoDict(tr_torrent* tor)
 
 static bool hasAnyLocalData(tr_torrent const* tor)
 {
+    auto tmpstr = std::string{};
+
     for (tr_file_index_t i = 0; i < tor->info.fileCount; ++i)
     {
-        if (tr_torrentFindFile2(tor, i, nullptr, nullptr, nullptr))
+        if (tor->findFile(i, tmpstr))
         {
             return true;
         }
@@ -2592,7 +2595,11 @@ time_t tr_torrentGetFileMTime(tr_torrent const* tor, tr_file_index_t i)
 
     if (!tr_fdFileGetCachedMTime(tor->session, tor->uniqueId, i, &mtime))
     {
-        tr_torrentFindFile2(tor, i, nullptr, nullptr, &mtime);
+        auto found = tor->findFile(i);
+        if (found)
+        {
+            mtime = found->last_modified_at;
+        }
     }
 
     return mtime;
@@ -3306,6 +3313,49 @@ void tr_torrentGotBlock(tr_torrent* tor, tr_block_index_t block)
 /***
 ****
 ***/
+
+#if 0
+      struct tr_found_file
+      {
+          std::string_view path;
+          std::string subpath;
+          time_t mtime;
+      };
+#endif
+
+std::optional<tr_torrent::tr_found_file> tr_torrent::findFile(tr_file_index_t fileNum, std::string& tmpstr) const
+{
+    auto ret = tr_found_file{};
+
+    auto const check_path = [&tmpstr, &ret](std::string_view parent, std::string_view subpath)
+    {
+        tr_buildPath(tmpstr, parent, subpath);
+        if (!tr_sys_path_get_info(tmpstr.c_str(), 0, &ret, nullptr))
+        {
+            return false;
+        }
+
+        ret.path = parent;
+        ret.subpath = subpath;
+        return true;
+    };
+
+    TR_ASSERT(fileNum < info.fileCount);
+    auto const& file = info.files[fileNum];
+    if (check_path(this->downloadDir, file.name) || check_path(this->incompleteDir, file.name))
+    {
+        return ret;
+    }
+
+    auto part = std::string{ file.name };
+    part += ".part";
+    if (check_path(this->downloadDir, part) || check_path(this->incompleteDir, part))
+    {
+        return ret;
+    }
+
+    return {};
+}
 
 static void find_file_in_dir(
     char const* name,
