@@ -2117,20 +2117,19 @@ static void sessionLoadTorrents(void* vdata)
     if (odir != TR_BAD_SYS_DIR)
     {
         char const* name = nullptr;
+        auto path = std::string{};
         while ((name = tr_sys_dir_read_name(odir, nullptr)) != nullptr)
         {
             if (tr_str_has_suffix(name, ".torrent"))
             {
-                char* const path = tr_buildPath(dirname, name, nullptr);
-                tr_ctorSetMetainfoFromFile(data->ctor, path);
+                tr_buildPath(path, dirname, name);
+                tr_ctorSetMetainfoFromFile(data->ctor, path.c_str());
 
                 tr_torrent* const tor = tr_torrentNew(data->ctor, nullptr, nullptr);
                 if (tor != nullptr)
                 {
                     torrents.push_back(tor);
                 }
-
-                tr_free(path);
             }
         }
 
